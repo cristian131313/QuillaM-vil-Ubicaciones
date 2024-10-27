@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Location Tracking with Updates</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #ff0000;
+        }
+        #location-display {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        #updates {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-top: 10px;
+        }
+        .update-item {
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div id="location-display">
+        <h1>Rastreador de ubicación</h1>
+        <p id="status">Haga clic en Iniciar para comenzar el rastreo</p>
+        <button onclick="startTracking()">Iniciar rastreo</button>
+        <button onclick="stopTracking()">Detener rastreo</button>
+        <p id="serverStatus"></p>
+        <div id="updates"></div>
+    </div>
+
+    <script>
+        let watchId;
+        let updateInterval;
+        const API_URL = 'https://quilla-movil-api-production.up.railway.app'; // Cambia esto a tu URL de Railway en producción
+
+        async function sendLocationToServer(latitude, longitude, timestamp) {
+            try {
+                const response = await fetch(`${API_URL}/update_location`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        latitude: latitude,
+                        longitude: longitude,
+                        timestamp: timestamp
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                document.getElementById('serverStatus').textContent = 'Datos enviados correctamente';
+                document.getElementById('serverStatus').className = 'success';
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('serverStatus').textContent = 'Error al enviar datos: ' + error.message;
+                document.getElementById('serverStatus').className = 'error';
+            }
+        }
+
+        function startTracking() {
+            if ("geolocation" in navigator) {
+                document.getElementById('status').textContent = 'Rastreo iniciado...';
+                
+                watchId = navigator.geolocation.watchPosition(
+                    updatePosition,
+                    handleError,
+                    { enableHighAccuracy: true, maximumAge: 0 }
+                );
+
+                updateInterval = setInterval(displayUpdate, 5000); // Actualiza cada 5 segundos
+            } else {
+                document.getElementById('status').textContent = 'La geolocalización no está soportada en este navegador.';
+            }
+        }
+
+        function stopTracking() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                clearInterval(updateInterval);
+                document.getElementById('status').textContent = 'Rastreo detenido';
+                document.getElementById('serverStatus').textContent = '';
+            }
+        }
+
+        let lastPosition = null;
+
+        function updatePosition(position) {
+            lastPosition = position;
+        }
+
+        async function displayUpdate() {
+            if (lastPosition) {
+                const latitude = lastPosition.coords.latitude;
+                const longitude = lastPosition.coords.longitude;
+                const timestamp = new Date().toISOString();
+
+                const updateItem = document.createElement("div");
+                updateItem.className = 'update-item';
+                updateItem.innerHTML = `
+                    <strong>${new Date().toLocaleTimeString()}</strong><br>
+                    Latitud: ${latitude.toFixed(6)}<br>
+                    Longitud: ${longitude.toFixed(6)}
+                `;
+
+                const updates = document.getElementById('updates');
+                updates.insertBefore(updateItem, updates.firstChild);
+
+                if (updates.children.length > 10) {
+                    updates.removeChild(updates.lastChild);
+                }
+
+                await sendLocationToServer(latitude, longitude, timestamp);
+            }
+        }
+
+        function handleError(error) {
+            document.getElementById('status').textContent = 'Error: ' + error.message;
+            document.getElementById('serverStatus').textContent = 'Error al obtener ubicación: ' + error.message;
+            document.getElementById('serverStatus').className = 'error';
+        }
+    </script>
+</body>
+</html>
